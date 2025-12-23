@@ -1,0 +1,39 @@
+{
+  "name": "devjourney-v2",
+  "version": "2.0.0",
+  "private": true,
+  "description": "DevJourney v2 - Flutter + NestJS unified backend",
+  "author": "DevJourney Team",
+  "license": "MIT",
+  "scripts": {
+    "backend:dev": "cd backend && pnpm run start:dev",
+    "backend:build": "cd backend && pnpm run build",
+    "backend:start": "cd backend && pnpm run start:prod",
+    "backend:test": "cd backend && pnpm run test",
+    "backend:lint": "cd backend && pnpm run lint",
+    "flutter:run": "cd flutter_app && flutter run",
+    "flutter:build:web": "cd flutter_app && flutter build web",
+    "flutter:build:android": "cd flutter_app && flutter build apk",
+    "flutter:build:ios": "cd flutter_app && flutter build ios",
+    "flutter:test": "cd flutter_app && flutter test",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "docker:build": "docker-compose build",
+    "db:migrate": "cd backend && pnpm run prisma:migrate",
+    "db:seed": "cd backend && pnpm run prisma:seed",
+    "db:studio": "cd backend && pnpm run prisma:studio",
+    "dev": "concurrently \"pnpm run backend:dev\" \"cd flutter_app && flutter run -d chrome\"",
+    "setup": "pnpm install && cd backend && pnpm install && flutter pub get --directory=flutter_app",
+    "clean": "rimraf backend/dist backend/node_modules flutter_app/build node_modules"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=18.17.0",
+    "pnpm": ">=8.15.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}

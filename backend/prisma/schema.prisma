@@ -1,0 +1,372 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  username    String   @unique
+  password    String
+  avatarUrl   String?
+  role        Role     @default(USER)
+  totalXp     Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastLoginAt DateTime?
+
+  profile        UserProfile?
+  submissions    Submission[]
+  progress       UserProgress[]
+  lessonProgress LessonProgress[]
+  courseProgress CourseProgress[]
+  xpEvents       XpEvent[]
+  aiHints        AiHintEvent[]
+  examAttempts   ExamAttempt[]
+  certificates   Certificate[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id                String     @id @default(uuid())
+  userId            String     @unique
+  age               Int?
+  interests         String[]   // ["web", "mobile", "gamedev", "ai", "data"]
+  preferredLanguage String     @default("uk") // uk, ru, en
+  skillLevel        SkillLevel @default(BEGINNER)
+  learningGoals     String?
+  timezone          String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model Track {
+  id          String     @id @default(uuid())
+  slug        String     @unique
+  title       Json       // {"uk": "Веб-розробка", "ru": "Веб-разработка", "en": "Web Development"}
+  description Json
+  icon        String?
+  level       SkillLevel
+  order       Int        @default(0)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  courses Course[]
+
+  @@map("tracks")
+}
+
+model Course {
+  id            String   @id @default(uuid())
+  trackId       String
+  slug          String   @unique
+  title         Json
+  description   Json
+  duration      Int      // minutes
+  order         Int      @default(0)
+  prerequisites String[] // Course IDs
+  xpReward      Int      @default(100)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  track    Track            @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  modules  Module[]
+  progress CourseProgress[]
+  exams    Exam[]
+
+  @@map("courses")
+}
+
+model Module {
+  id          String   @id @default(uuid())
+  courseId    String
+  slug        String
+  title       Json
+  description Json
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@unique([courseId, slug])
+  @@map("modules")
+}
+
+model Lesson {
+  id          String     @id @default(uuid())
+  moduleId    String
+  slug        String
+  title       Json
+  content     Json       // Markdown with translations
+  type        LessonType @default(THEORY)
+  duration    Int        // minutes
+  order       Int        @default(0)
+  videoUrl    String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  module     Module      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  challenges Challenge[] @relation("LessonChallenges")
+  progress   LessonProgress[]
+
+  @@unique([moduleId, slug])
+  @@map("lessons")
+}
+
+model LessonProgress {
+  id          String   @id @default(uuid())
+  userId      String
+  lessonId    String
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  updatedAt   DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([userId, startedAt])
+  @@map("lesson_progress")
+}
+
+model Challenge {
+  id          String     @id @default(uuid())
+  lessonId    String?
+  title       String
+  description String
+  difficulty  Difficulty
+  tags        String[]
+  language    String     @default("python") // python, javascript, java, cpp
+  ageRange    String?    // "8-12", "13-17", "18+"
+  totalTests  Int        @default(0)
+  timeLimit   Int        @default(5000) // milliseconds
+  memoryLimit Int        @default(256)  // MB
+  starterCode String?
+  solution    String?
+  hints       Json?      // Predefined hints in multiple languages
+  xpReward    Int        @default(50)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  lesson      Lesson?      @relation("LessonChallenges", fields: [lessonId], references: [id])
+  testCases   TestCase[]
+  submissions Submission[]
+  progress    UserProgress[]
+  aiHints     AiHintEvent[]
+
+  @@map("challenges")
+}
+
+model TestCase {
+  id          String  @id @default(uuid())
+  challengeId String
+  input       String
+  expected    String
+  isPublic    Boolean @default(false)
+  weight      Int     @default(1)
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@map("test_cases")
+}
+
+model Submission {
+  id           String           @id @default(uuid())
+  userId       String
+  challengeId  String
+  code         String
+  language     String
+  status       SubmissionStatus @default(PENDING)
+  score        Int?
+  executionTime Int?            // milliseconds
+  memoryUsed   Int?             // KB
+  errorMessage String?
+  testResults  Json?
+  createdAt    DateTime         @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@map("submissions")
+}
+
+model UserProgress {
+  id          String   @id @default(uuid())
+  userId      String
+  challengeId String
+  completed   Boolean  @default(false)
+  bestScore   Int?
+  attempts    Int      @default(0)
+  lastAttempt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, challengeId])
+  @@map("user_progress")
+}
+
+model CourseProgress {
+  id          String    @id @default(uuid())
+  userId      String
+  courseId    String
+  completed   Boolean   @default(false)
+  progress    Int       @default(0) // 0-100%
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@map("course_progress")
+}
+
+model XpEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  amount    Int
+  reason    String   // "challenge_completed", "course_finished", "streak_3days"
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("xp_events")
+}
+
+model AiHintEvent {
+  id           String   @id @default(uuid())
+  userId       String
+  submissionId String?
+  challengeId  String
+  hintLevel    Int      // 1-5
+  hintText     String   @db.Text
+  locale       String   @default("uk")
+  wasHelpful   Boolean?
+  createdAt    DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@index([userId, challengeId])
+  @@map("ai_hint_events")
+}
+
+model Exam {
+  id           String   @id @default(uuid())
+  courseId     String?
+  title        Json
+  description  Json
+  duration     Int      // minutes
+  passingScore Int      @default(70)
+  order        Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  course    Course?        @relation(fields: [courseId], references: [id])
+  questions ExamQuestion[]
+  attempts  ExamAttempt[]
+
+  @@map("exams")
+}
+
+model ExamQuestion {
+  id            String   @id @default(uuid())
+  examId        String
+  question      Json     // Multi-language question text
+  options       Json     // {"uk": ["A", "B", "C"], ...}
+  correctAnswer String
+  explanation   Json?    // Why this answer is correct
+  points        Int      @default(1)
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@map("exam_questions")
+}
+
+model ExamAttempt {
+  id          String   @id @default(uuid())
+  userId      String
+  examId      String
+  score       Int
+  maxScore    Int
+  passed      Boolean
+  answers     Json
+  startedAt   DateTime @default(now())
+  completedAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exam Exam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([userId, examId])
+  @@map("exam_attempts")
+}
+
+model Certificate {
+  id             String   @id @default(uuid())
+  userId         String
+  courseId       String
+  certificateUrl String?
+  issueDate      DateTime @default(now())
+  metadata       Json?    // Additional info
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("certificates")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum SkillLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum LessonType {
+  THEORY
+  PRACTICE
+  VIDEO
+  QUIZ
+}
+
+enum SubmissionStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  ERROR
+  TIMEOUT
+}

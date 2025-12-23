@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: devjourney-postgres
+    environment:
+      POSTGRES_USER: devjourney
+      POSTGRES_PASSWORD: devjourney_pass
+      POSTGRES_DB: devjourney
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - devjourney-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devjourney"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: devjourney-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - devjourney-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # NestJS Backend (API + Runner + AI)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: devjourney-backend
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://devjourney:devjourney_pass@postgres:5432/devjourney
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      AI_API_KEY: ${AI_API_KEY}
+      AI_MODEL: gpt-4-turbo-preview
+      DOCKER_HOST: /var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./backend:/app
+      - /app/node_modules
+      - /app/dist
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - devjourney-network
+    restart: unless-stopped
+
+  # Flutter Web Build (Nginx)
+  frontend:
+    build:
+      context: ./flutter_app
+      dockerfile: Dockerfile.web
+    container_name: devjourney-frontend
+    ports:
+      - "3000:80"
+    environment:
+      API_URL: http://backend:3001
+    depends_on:
+      - backend
+    networks:
+      - devjourney-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  devjourney-network:
+    driver: bridge
